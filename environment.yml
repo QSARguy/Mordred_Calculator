@@ -1,4 +1,4 @@
-name: my_streamlit_app
+name: mordred_calculator
 channels:
   - conda-forge
 dependencies:
