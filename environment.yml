@@ -1,0 +1,10 @@
+name: my_streamlit_app
+channels:
+  - conda-forge
+dependencies:
+  - python=3.9
+  - pandas
+  - streamlit
+  - mordred
+  - rdkit
+  - libxrender
