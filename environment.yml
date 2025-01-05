@@ -1,12 +1,12 @@
 name: mordred_calculator
 channels:
   - conda-forge
-  - defaults
-  - rdkit
 dependencies:
   - python=3.9
-  - streamlit
-  - pandas
-  - mordred
   - rdkit
-  - libxrender
+  - pandas
+  - streamlit
+  - mordred
+  - pip
+  - pip:
+      - streamlit
