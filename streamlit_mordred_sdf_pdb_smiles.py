@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from rdkit import Chem
+from rdkit.Chem import AllChem
 from mordred import Calculator, descriptors
 import tempfile
 
@@ -12,9 +13,6 @@ def calculate_descriptors(input_file, file_format):
     Args:
         input_file: Uploaded file object.
         file_format: Format of the uploaded file (e.g., 'sdf', 'pdb').
-
-    Returns:
-        DataFrame: A pandas DataFrame containing calculated descriptors.
     """
     # Save the uploaded file to a temporary file
     with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file_format}") as temp_file:
@@ -25,22 +23,34 @@ def calculate_descriptors(input_file, file_format):
     if file_format == "sdf":
         suppl = Chem.SDMolSupplier(temp_file_path)
     elif file_format == "pdb":
-        suppl = [Chem.MolFromPDBFile(temp_file_path, sanitize=False)]
+        mol = Chem.MolFromPDBFile(temp_file_path, sanitize=False)
+        if mol:
+            try:
+                Chem.SanitizeMol(mol)
+                suppl = [mol]
+            except Chem.rdchem.MolSanitizeException as e:
+                st.error(f"Failed to sanitize molecule from PDB file: {e}")
+                return pd.DataFrame()
+        else:
+            st.error("Failed to read PDB file.")
+            return pd.DataFrame()
     else:
-        st.error("Unsupported file format. Please upload SDF or PDB files.")
+        st.error("Unsupported file format")
         return pd.DataFrame()
 
     calc = Calculator(descriptors, ignore_3D=False)
 
     descriptor_data = []
-    total_molecules = len(suppl)
-
-    # Streamlit progress bar
-    progress_bar = st.progress(0)
-
     for idx, mol in enumerate(suppl):
         if mol is None:
             st.warning(f"Error reading molecule at index {idx}")
+            continue
+
+        try:
+            # Sanitize molecule to ensure ring info is initialized
+            Chem.SanitizeMol(mol)
+        except Chem.rdchem.MolSanitizeException as e:
+            st.warning(f"Sanitization failed for molecule at index {idx}: {e}")
             continue
 
         molecule_id = f"Molecule_{idx}"
@@ -52,14 +62,12 @@ def calculate_descriptors(input_file, file_format):
         except Exception as e:
             st.warning(f"Error processing molecule ID {molecule_id}: {e}")
 
-        progress_bar.progress((idx + 1) / total_molecules)
-
     descriptor_df = pd.DataFrame(descriptor_data)
 
     # Filter out non-numeric or boolean columns (except 'ID')
     numeric_columns = ['ID'] + [
         col for col in descriptor_df.columns
-        if pd.api.types.is_numeric_dtype(descriptor_df[col]) and not pd.api.types.is_bool_dtype(descriptor_df[col])
+        if col == 'ID' or (pd.api.types.is_numeric_dtype(descriptor_df[col]) and not pd.api.types.is_bool_dtype(descriptor_df[col]))
     ]
     descriptor_df = descriptor_df[numeric_columns]
 
@@ -69,27 +77,24 @@ def calculate_descriptors(input_file, file_format):
     return descriptor_df
 
 # Streamlit UI
-def main():
-    st.title("Mordred Descriptor Calculator")
-    st.write("Upload a file in SDF (.sdf) or PDB (.pdb) format to calculate molecular descriptors.")
+st.title("Mordred Descriptor Calculator")
+st.write("Upload a file in SDF (.sdf) or PDB (.pdb) format.")
 
-    uploaded_file = st.file_uploader("Upload a file", type=["sdf", "pdb"])
+uploaded_file = st.file_uploader("Upload a file", type=["sdf", "pdb"])
 
-    if uploaded_file:
-        file_format = uploaded_file.name.split(".")[-1].lower()
+if uploaded_file:
+    file_format = uploaded_file.name.split(".")[-1].lower()
 
-        st.info("Processing file...")
-        output_df = calculate_descriptors(uploaded_file, file_format)
+    st.info("Processing file...")
+    output_df = calculate_descriptors(uploaded_file, file_format)
 
-        if not output_df.empty:
-            st.success("Descriptors calculated successfully!")
-            st.dataframe(output_df)
+    if not output_df.empty:
+        st.success("Descriptors calculated successfully!")
+        st.dataframe(output_df)
 
-            # Provide download link for CSV
-            csv = output_df.to_csv(index=False).encode('utf-8')
-            st.download_button("Download CSV", data=csv, file_name="output_descriptors.csv", mime="text/csv")
-        else:
-            st.error("No descriptors could be calculated. Please check the input file.")
-
-if __name__ == "__main__":
-    main()
+        # Provide download link for CSV
+        csv = output_df.to_csv(index=False).encode('utf-8')
+        st.download_button("Download CSV", data=csv, file_name="output_descriptors.csv", mime="text/csv")
+    else:
+        st.error("No descriptors could be calculated. Please check the input file.")
+        
