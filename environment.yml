@@ -2,6 +2,7 @@ name: mordred_calculator
 channels:
   - conda-forge
   - defaults
+  - rdkit
 dependencies:
   - python=3.9
   - streamlit
